@@ -1,0 +1,26 @@
+name: broadsheet
+
+services:
+  broadsheet:
+    build: .
+    image: broadsheet:latest
+    container_name: broadsheet
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      DATABASE_PATH: /data/broadsheet.db
+      HOST: 0.0.0.0
+      PORT: 8000
+    ports:
+      - "${PORT_HOST:-8080}:8000"
+    volumes:
+      - broadsheet_data:/data
+    mem_limit: 32m
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+
+volumes:
+  broadsheet_data:
