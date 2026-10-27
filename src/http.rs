@@ -13,7 +13,6 @@ use std::time::Duration;
 use crate::api::{self, ApiRequest, Reply};
 use crate::{assets, State};
 
-const MAX_REQUEST_BYTES: usize = 1_000_000;
 const MAX_HEADER_LINES: usize = 100;
 const MAX_LINE_BYTES: u64 = 8192;
 const MAX_CONNECTIONS: usize = 128;
@@ -26,7 +25,7 @@ const SECURITY_HEADERS: [(&str, &str); 4] = [
     (
         "Content-Security-Policy",
         "default-src 'self'; style-src 'self' 'unsafe-inline'; \
-         font-src 'self'; img-src 'self' data:; script-src 'self'; \
+         font-src 'self'; img-src 'self' data: blob:; script-src 'self'; \
          frame-ancestors 'none'; base-uri 'none'; form-action 'self'",
     ),
 ];
@@ -72,7 +71,8 @@ fn read_request(stream: &TcpStream) -> std::io::Result<Option<RawRequest>> {
     }
 
     let length: usize = headers.get("content-length").and_then(|v| v.parse().ok()).unwrap_or(0);
-    let body = if length > MAX_REQUEST_BYTES {
+    let path = target.split('?').next().unwrap_or("");
+    let body = if length > api::body_limit(&method, path) {
         None
     } else {
         let mut buf = vec![0u8; length];
@@ -94,6 +94,7 @@ fn reason(status: u16) -> &'static str {
         405 => "Method Not Allowed",
         409 => "Conflict",
         413 => "Payload Too Large",
+        415 => "Unsupported Media Type",
         _ => "Internal Server Error",
     }
 }
@@ -123,6 +124,10 @@ fn write_response(
 }
 
 fn send_reply(stream: &mut TcpStream, reply: &Reply) -> std::io::Result<()> {
+    if let Some(file) = &reply.file {
+        let extra: Vec<(&str, String)> = file.headers.iter().map(|(n, v)| (*n, v.clone())).collect();
+        return write_response(stream, reply.status, &file.ctype, &extra, &file.bytes, reply.status == 304);
+    }
     let body = serde_json::to_vec(&reply.payload).unwrap_or_else(|_| b"{}".to_vec());
     let mut extra = vec![("Cache-Control", "no-store".to_string())];
     extra.extend(reply.cookies.iter().map(|c| ("Set-Cookie", c.clone())));
@@ -131,12 +136,21 @@ fn send_reply(stream: &mut TcpStream, reply: &Reply) -> std::io::Result<()> {
 
 fn serve_static(stream: &mut TcpStream, req: &RawRequest, path: &str, head_only: bool) -> std::io::Result<()> {
     let path = if path.is_empty() || path == "/" { "/index.html" } else { path };
-    let Some(asset) = assets::find(path) else {
+    // The app routes in the browser (/today, /page/12, ...): any path that is not a file and
+    // looks like a route (no extension, no dot segments) gets the app's index page.
+    let is_route = !path.contains('.') && !path.contains("//");
+    let Some(asset) = assets::find(path).or_else(|| is_route.then(|| assets::find("/index.html")).flatten()) else {
         return write_response(stream, 404, "text/plain; charset=utf-8", &[], b"Not found", head_only);
     };
-    // Fonts rarely change, so let the browser reuse them for a week without asking; everything
-    // else revalidates with its ETag on each load (a 304 when unchanged).
-    let cache = if path.starts_with("/fonts/") { "public, max-age=604800" } else { "no-cache" };
+    // Built assets carry a content hash in their name and fonts rarely change, so the browser
+    // keeps them; the index page revalidates with its ETag on each load (a 304 when unchanged).
+    let cache = if path.starts_with("/assets/") {
+        "public, max-age=31536000, immutable"
+    } else if path.starts_with("/fonts/") {
+        "public, max-age=604800"
+    } else {
+        "no-cache"
+    };
     let mut extra = vec![
         ("Cache-Control", cache.to_string()),
         ("ETag", asset.etag.to_string()),

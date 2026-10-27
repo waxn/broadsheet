@@ -1,36 +1,41 @@
 # Broadsheet
 
-Keyboard-friendly tasks and notes for school. Classes hold their own central document and
-their assignments; every assignment is also a to-do. Each to-do and each class can hold several
-pages written in markdown-style blocks.
+Tasks, notes and a calendar for school, in one fast app. It combines Todoist-style tasks, Notion-style pages,
+and a Hey-style calendar, organised around your **classes**.
 
-Stack: Rust (standard-library HTTP server, SQLite compiled in), vanilla JavaScript frontend
-embedded in the binary. Runs in Docker with Docker Compose.
+Stack: Rust (standard-library HTTP server, SQLite compiled in) serving a Svelte 5 + TipTap web app that is
+embedded in the binary. Runs in Docker with Docker Compose. Nothing is loaded from third-party servers.
 
 ## Run it
-
-Build the image and start it in the background:
 
 ```bash
 docker compose up -d --build
 ```
 
-Then open <http://localhost:8080> (change `PORT_HOST` in `.env` to use another port).
-
-Stop it with:
-
-```bash
-docker compose down
-```
-
-Your data lives in the named volume `broadsheet_data`, so it survives rebuilds and restarts.
+Then open <http://localhost:8080> (change `PORT_HOST` in `.env` to use another port). Stop it with
+`docker compose down`. Your data (database and uploaded files) lives in the named volume `broadsheet_data`.
 
 ### Without Docker
 
+Needs Rust and Node.js. `cargo` builds the web app itself (running `npm ci` and `npm run build` in `web/`)
+whenever its sources changed.
+
 ```bash
-cargo run --release        # serves on http://localhost:8000, data in /data/broadsheet.db
 DATABASE_PATH=./broadsheet.db PORT=8080 cargo run --release
 ```
+
+### Working on the web app
+
+Run the server, then Vite's dev server with hot reload in front of it:
+
+```bash
+cargo run                                  # API on :8000
+npm --prefix web run dev                   # app on :5173, /api proxied to :8000
+npm --prefix web test                      # parser tests
+```
+
+`BROADSHEET_API=http://localhost:8002 npm --prefix web run dev` points the dev server at another port.
+Set `BROADSHEET_SKIP_WEB=1` to make `cargo` embed `web/dist` as it is without rebuilding it.
 
 ## Settings (`.env`)
 
@@ -43,67 +48,93 @@ DATABASE_PATH=./broadsheet.db PORT=8080 cargo run --release
 
 ## Using it
 
-- **To-do** (left) and its **document** (right). Drag the rule between them to resize.
-- Pick Open, Done or All above the list. Groups are Overdue, Today, This week, Later, No date.
-- **Search** bar across the top finds tasks, classes and note text.
-- **Classes**: create a class, then add assignments on its page. Its central document sits on the right.
-- Set a class, due date and priority on any to-do. Setting a class turns it into an assignment.
-- **Documents** are markdown written as you type. `# `, `## `, `### `, `- `, `1. `, `- [ ] `, `> `, `---` and
-  three backticks (then Enter) all turn into blocks. Right-click a block to change its type.
-- A small outline of the headings sits to the right of each note; click an entry to jump to it.
-- Pages autosave about half a second after you stop typing.
-- **Styles:** the top bar has a "Plain style" / "Dark style" button. Plain is a black, Wikipedia-like look
-  (sans text, serif headings, blue links); the choice is remembered per browser.
+**Tasks** (like Todoist)
+- **Inbox**, **Today** (with Overdue) and **Upcoming** (a week strip and every day ahead). Drag a task onto a day to move it.
+- **Classes** are projects: each has a colour, sections, a list or **board** layout, and its own notebook (the **Notes** tab).
+- **Quick add** (`Q` anywhere) understands plain words and highlights them as you type:
+  `Essay draft fri 3pm for 2h p1 #English /Essays every week`
+  - dates: `today`, `tmr`, `fri`, `next week`, `oct 30`, `30th october`, `in 3 days`, `the 15th`
+  - times and length: `3pm`, `at 9`, `15:30`, `noon`, `for 1h` (a time plus a length also books it on the calendar)
+  - repeats: `every day`, `every weekday`, `every mon, wed`, `every other week`, `every 3 days`, `every 1st`
+  - `p1`–`p4` priority, `#Class`, `/Section`
+- Sub-tasks (drag a task right onto another, or add them in the task view), descriptions, and notes pages per task.
+- Completing a repeating task moves it to its next date. Every completion can be undone from the notice.
+
+**Notes** (like Notion)
+- Pages nest inside pages; the sidebar shows the tree. Drag pages to reorder or nest them. Favorites, trash, Markdown export.
+- Type `/` for blocks: headings, lists, to-dos, toggles, quotes, callouts, code, dividers, tables, images, files, sub-pages.
+- Markdown shortcuts as you type: `#` `##` `###`, `-`, `1.`, `[]`, `>`, ```` ``` ````, `---`.
+- `@` mentions a page, task, class or date (`@fri` works); `[[` links a page and can create it. Pages list their backlinks.
+- Drag the `⋮⋮` handle to move a block; click it to turn the block into another type, colour it, duplicate or delete it.
+- Select text for the formatting bar: bold, italic, underline, strike, code, link (`Ctrl+K`), text colour and highlight.
+- Paste or drop images and files to upload them. Per page: icon, serif or mono font, full width.
+- **Focus mode** (`Ctrl+Shift+F`) hides everything but the page, inside the window. `Esc` leaves.
+- Pages save as you type. Pages written in the old version are converted the first time they are opened.
+
+**Calendar** (like Hey Calendar)
+- Month, week and day views (`M`, `W`, `D`; `T` for today; arrows to move). Countdowns sit in the header.
+- Drag on the grid to create an event; drag events to move them and pull the bottom edge to resize.
+- Tasks due on a day show on it. Drag a task from the **To schedule** tray onto the grid to book a time block for it.
+- Events can count down ("12 days until Chem exam"), on the calendar and on Today.
+- **Habits**: tick them on the Habits page or tap their emoji on any day in the calendar. Streaks and a six-month heatmap.
 
 ### Keyboard
 
 | Key | Action |
 |-----|--------|
-| `n` | New to-do, or new assignment on a class page |
-| `j` / `k` | Move up and down the list (opens each to-do) |
-| `Enter` or `e` | Edit the open document |
-| `x` | Mark the selected to-do done or not done |
-| `1` `2` `3` `0` | Priority: high, medium, low, none |
-| `d` | Set the due date |
-| `/` | Search tasks, classes and notes |
-| `g` then `t` / `c` | Go to to-dos / classes |
-| `Ctrl+Shift+F` | Fullscreen notes: just the text (`Esc` to leave) |
-| `Ctrl+B` / `Ctrl+I` / `Ctrl+E` / `Ctrl+K` | Bold, italic, inline code, link |
-| `?` | Show all shortcuts |
+| `Q` / `N` | Quick add a task (`N` adds to the class you are in) |
+| `Ctrl+K` or `/` | Search everything, or run a command |
+| `G` then `I` `T` `U` `C` `N` `H` | Go to Inbox, Today, Upcoming, Calendar, Notes, Habits |
+| `J` / `K` | Move through tasks |
+| `Enter` / `E` | Open the task |
+| `X` | Complete |
+| `1` `2` `3` `4` | Priority 1–4 |
+| `D` | Set the date |
+| `[` | Hide or show the sidebar |
+| `Ctrl+Shift+F` | Focus mode |
+| `?` | All shortcuts |
 
 ## Layout
 
 ```
 src/
-  main.rs      reads HOST / PORT and starts the server
-  lib.rs       shared state (one SQLite connection behind a mutex), spawn / run
-  http.rs      HTTP/1.1 on std::net: request parsing, static files (gzip + ETag), thread per connection
-  api.rs       JSON handlers, validation, routing; every query is scoped to the signed-in user
-  auth.rs      password hashing (PBKDF2-SHA256) and session tokens
-  db.rs        SQLite schema and connection settings
-  config.rs    environment settings
-  assets.rs    the frontend, embedded at build time
-build.rs       gzips and fingerprints everything in frontend/ for embedding
-frontend/      index.html, css/app.css, js/*.js, fonts/*.woff2, favicon.svg (served as-is, no build step)
-tests/api.rs   end-to-end API and static-file tests
+  main.rs        reads HOST / PORT and starts the server
+  lib.rs         shared state (one SQLite connection behind a mutex), spawn / run
+  http.rs        HTTP/1.1 on std::net: requests, static files (gzip + ETag), app routes, thread per connection
+  api/           JSON API, one module per area; every query is scoped to the signed-in user
+    mod.rs       request and reply types, validation helpers, auth, bootstrap, routing
+    tasks.rs     to-dos, sub-tasks, recurrence on completion, sections, drag-and-drop reordering
+    classes.rs   classes
+    pages.rs     nested pages, editor JSON, links and backlinks, trash
+    calendar.rs  events, countdowns, habits
+    files.rs     uploads (stored by content hash next to the database)
+    search.rs    search across everything
+  recur.rs       repeat rules and the date arithmetic for "next occurrence"
+  auth.rs        password hashing (PBKDF2-SHA256) and session tokens
+  db.rs          SQLite schema (version 2) and the upgrade from version 1
+  config.rs      environment settings
+  assets.rs      the web app, embedded at build time
+build.rs         builds web/ if needed, then gzips and fingerprints web/dist for embedding
+web/             Svelte 5 + TipTap app (Vite); src/lib has the store, router and quick-add parser
+tests/api.rs     end-to-end API, migration and static-file tests
 ```
 
 ## Tests
 
 ```bash
 cargo test
+npm --prefix web test
 ```
 
 ## Notes
 
-- Memory: about 5.5 MB resident, and about 3.3 MB for the whole binary (frontend and fonts included).
-  The Docker image is that one static binary on an empty base image.
-- Static files are sent gzip-compressed with ETags, so repeat loads are a single 304 per file.
-- Fonts are self-hosted: Tinos (Apache License 2.0), latin and latin-ext, as woff2 in `frontend/fonts/`.
-  Nothing is requested from any third-party server, and the Content-Security-Policy forbids it.
-  Other scripts (Greek, Cyrillic and so on) fall back to the system serif.
-- Passwords are hashed with PBKDF2-SHA256 (600,000 iterations). Sessions use random tokens
-  stored only as hashes. The stored formats and the database schema match the earlier Python
-  version, so an existing database and its logins keep working.
-- Not built: drag-to-reorder within a list, password change, account deletion, and
-  sharing between users.
+- One static binary on an empty Docker image. The main script is about 75 KB gzipped; the editor (about 180 KB)
+  loads only when a page is opened. Built files have hashed names and are cached for good; the page revalidates.
+- Fonts are self-hosted: Inter (SIL Open Font License) for the interface and Tinos (Apache License 2.0) for serif pages.
+  The Content-Security-Policy allows nothing from other origins.
+- Uploaded files are served only to their owner, with their own restrictive Content-Security-Policy; types a browser
+  could run (SVG, HTML) are always downloads. Uploads are limited to 25 MB.
+- Passwords are hashed with PBKDF2-SHA256 (600,000 iterations). Sessions use random tokens stored only as hashes.
+- A version 1 database (from the earlier app or the Python version) is upgraded in place on first start: classes,
+  to-dos, logins and notes are kept. Back up `broadsheet.db` first if you want to be able to go back.
+- Not built: sharing between users, password change, account deletion, external calendar sync, reminders.

@@ -15,7 +15,8 @@ services:
       - "${PORT_HOST:-8080}:8000"
     volumes:
       - broadsheet_data:/data
-    mem_limit: 32m
+    # Room for a 25 MB upload in flight; idle use stays around 6 MB.
+    mem_limit: 96m
     read_only: true
     tmpfs:
       - /tmp

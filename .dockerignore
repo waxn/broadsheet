@@ -3,6 +3,11 @@ data
 tests
 .env
 .git
+.claude
 *.db
 *.db-wal
 *.db-shm
+desktop
+frontend
+web/node_modules
+web/dist

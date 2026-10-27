@@ -6,6 +6,7 @@ pub mod auth;
 pub mod config;
 pub mod db;
 pub mod http;
+pub mod recur;
 
 use std::net::{SocketAddr, TcpListener};
 use std::sync::{Arc, Mutex};
